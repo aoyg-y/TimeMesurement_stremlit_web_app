@@ -23,7 +23,7 @@ class TimeMesurement:
             hsv = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV)
             h, s, v = cv2.split(hsv)
             #動画の中心付近のv値の平均をv_meansに追加
-            v_means.append(v[:, self.width-5: self.width+5].mean())
+            v_means.append(v[:, self.width/2 - 5: self.width / 2 +5].mean())
             frames.append(i)
         return np.array(frames), np.array(v_means)
     
