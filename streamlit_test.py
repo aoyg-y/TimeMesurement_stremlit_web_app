@@ -12,6 +12,7 @@ class TimeMesurement:
         self.video = cv2.VideoCapture(filepath)
         self.frame_num = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.video.get(cv2.CAP_PROP_FPS)
+        self.width = int(self.video.get(cv2.CAP_PROP_FRAME_WIDTH))
     
     def lightness(self):
         frames = []
@@ -22,7 +23,7 @@ class TimeMesurement:
             hsv = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV)
             h, s, v = cv2.split(hsv)
             #動画の中心付近のv値の平均をv_meansに追加
-            v_means.append(v[:,350:370].mean())
+            v_means.append(v[:, self.width-5: self.width+5].mean())
             frames.append(i)
         return np.array(frames), np.array(v_means)
     
