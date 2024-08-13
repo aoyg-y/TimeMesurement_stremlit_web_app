@@ -56,7 +56,7 @@ class TimeMesurement:
         averages.append(sum(group) / len(group))
         return averages
 
-    def peakpeak(self,size=10,threshold=5):
+    def peakpeak(self,size=10,threshold=4):
         #輝度の時間変化
         x = self.lightness()[1]
         #時間変化の移動平均を産出
