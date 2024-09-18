@@ -4,6 +4,7 @@ import tempfile
 import numpy as np
 import pandas as pd
 import cv2
+from PIL import Image
 import math
 
 class TimeMesurement:
@@ -43,22 +44,6 @@ class TimeMesurement:
             return xx_mean
     
 
-    #ひとに選ばせるならいらないかな
-
-    # def sequence_average(self, x):
-    #     #[34,35,56,67,89,90]のような形から、連続している部分の中心を出力(ピークトップとする)
-    #     averages = []
-    #     group = [x[0]]
-    #     for i in range(1,len(x)):
-    #         if x[i] == x[i-1] + 1:
-    #             group.append(x[i])
-            
-    #         else:
-    #             averages.append(sum(group) / len(group))
-    #             group = [x[i]]
-    #     averages.append(sum(group) / len(group))
-    #     return averages
-
     def peakpeak(self,threshold=4,size=10):
         #輝度の時間変化
         x = self.lightness()[1]
@@ -79,7 +64,7 @@ class TimeMesurement:
             except IndexError:
                 threshold -= 1
 
-        return non_zero_frames#np.array(peak_frames)
+        return non_zero_frames
     
 
     
@@ -91,34 +76,63 @@ def fileload_measure(file_path):
     TM = TimeMesurement(temp_file.name)
     #一時ファイルは閉じておく
     temp_file.close()
-    #dataframe型に変換して数値を丸めた
-    time = pd.DataFrame(TM.peakpeak() / TM.fps).round(2)
-    time.columns = ["time (s)"]
-    #fig, ax = plt.subplots()
-    #ax.plot(*TM.lightness())
-    #st.pyplot(fig)
-    return time
+
+    peaks = TM.peakpeak()
+    return TM,peaks
 
 st.title("区間タイム計測くん")
 st.subheader("使い方")
 st.text('''''')
+
+
+
 st.subheader("動画のアップロード")
-
 st_file_path = st.file_uploader("スタート地点の動画をアップロードしてください")
-st_time = fileload_measure(st_file_path)
-st.text("スタート地点通過")
-st.dataframe(st_time)
 
-go_file_path = st.file_uploader("ゴール地点の動画をアップロードしてください")
-go_time = fileload_measure(go_file_path)
-st.text(f"ゴール地点通過(秒)")
-st.dataframe(go_time)
+#動画がアップロードされていて、かつ動画解析をしていないとき
+if (st_file_path is not None) and ("TM" not in st.session_state):
+    TM, peaks = fileload_measure(st_file_path)
+    st.session_state.TM = TM
+    st.session_state.peaks = peaks
 
-st.subheader("解析結果")
-if len(st_time) != len(go_time):
-    st.text("ゴールとスタートを通過した人数が違います")
-else:
-    st.dataframe(go_time - st_time)
+#動画解析ができているとき
+if "TM" in st.session_state:
+    # セッションに現在のフレーム位置とピークリストのインデックスを保持
+    if 'peak_idx' not in st.session_state:
+        st.session_state.peak_idx = 0  # peakリストのインデックス
+    if 'frame_pos' not in st.session_state:
+        st.session_state.frame_pos = st.session_state.peaks[st.session_state.peak_idx]
+    if "selected_frame" not in st.session_state:
+        st.session_state.selected_frame = []
 
 
-#動画とグラフをその場で確認できるようにしたいね。-
+    # ボタンで操作を選択
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        if st.button("5つ前のフレーム"):
+            st.session_state.frame_pos = max(0,st.session_state.frame_pos - 5)
+    with col2:
+        if st.button("1つ前のフレーム"):
+            st.session_state.frame_pos = max(0,st.session_state.frame_pos - 1)
+    with col3:
+        if st.button("これにする"):
+            st.session_state.selected_frame.append(st.session_state.frame_pos)
+            st.session_state.peak_idx = min(len(st.session_state.peaks) - 1, st.session_state.peak_idx + 1)
+            st.session_state.frame_pos = st.session_state.peaks[st.session_state.peak_idx]
+            # クエリパラメータを設定してリロードをトリガーする
+            st.experimental_set_query_params(reload=True)
+    with col4:
+        if st.button("1つ次のフレーム"):
+            st.session_state.frame_pos = min(st.session_state.TM.frame_num-1, st.session_state.frame_pos + 1)
+    with col5:
+        if st.button("5つ次のフレーム"):
+            st.session_state.frame_pos = min(st.session_state.TM.frame_num-1, st.session_state.frame_pos + 5)
+
+    # 現在のフレームに移動
+    st.session_state.TM.video.set(cv2.CAP_PROP_POS_FRAMES, st.session_state.frame_pos)
+    ret, frame = st.session_state.TM.video.read()
+    if ret:
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(frame_rgb)
+        st.image(img_pil, caption=f"Frame {st.session_state.frame_pos}")
+        st.text(st.session_state.selected_frame)
