@@ -80,59 +80,90 @@ def fileload_measure(file_path):
     peaks = TM.peakpeak()
     return TM,peaks
 
+def peak_select(st_file_path):
+    #動画がアップロードされていて、かつ動画解析をしていないとき
+    if (st_file_path is not None) and ("TM" not in st.session_state):
+        TM, peaks = fileload_measure(st_file_path)
+        st.session_state.TM = TM
+        st.session_state.peaks = peaks
+
+    #動画解析ができているとき
+    if "TM" in st.session_state:
+        # セッションに現在のフレーム位置とピークリストのインデックスを保持
+        if 'peak_idx' not in st.session_state:
+            st.session_state.peak_idx = 0  # peakリストのインデックス
+        if 'frame_pos' not in st.session_state:
+            st.session_state.frame_pos = st.session_state.peaks[st.session_state.peak_idx]
+        if "selected_frame" not in st.session_state:
+            st.session_state.selected_frame = []
+
+
+        # ボタンで操作を選択
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        with col1:
+            if st.button("5つ前のフレーム"):
+                st.session_state.frame_pos = max(0,st.session_state.frame_pos - 5)
+        with col2:
+            if st.button("1つ前のフレーム"):
+                st.session_state.frame_pos = max(0,st.session_state.frame_pos - 1)
+        with col3:
+            if st.button("これにする"):
+                st.session_state.selected_frame.append(st.session_state.frame_pos)
+                st.session_state.peak_idx = min(len(st.session_state.peaks) - 1, st.session_state.peak_idx + 1)
+                st.session_state.frame_pos = st.session_state.peaks[st.session_state.peak_idx]
+        with col4:
+            if st.button("1つ次のフレーム"):
+                st.session_state.frame_pos = min(st.session_state.TM.frame_num-1, st.session_state.frame_pos + 1)
+        with col5:
+            if st.button("5つ次のフレーム"):
+                st.session_state.frame_pos = min(st.session_state.TM.frame_num-1, st.session_state.frame_pos + 5)
+        with col6:
+            if st.button("選択せず次へ"):
+                st.session_state.peak_idx = min(len(st.session_state.peaks) - 1, st.session_state.peak_idx + 1)
+                st.session_state.frame_pos = st.session_state.peaks[st.session_state.peak_idx]
+
+        # 現在のフレームに移動
+        st.session_state.TM.video.set(cv2.CAP_PROP_POS_FRAMES, st.session_state.frame_pos)
+        ret, frame = st.session_state.TM.video.read()
+        if ret:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img_pil = Image.fromarray(frame_rgb)
+            st.image(img_pil, caption=f"Frame {st.session_state.frame_pos}")
+            st.text(st.session_state.selected_frame)
+        
+        return st.session_state.selected_frame
+
+def change_movie(button_name):
+    st.button(button_name, on_click=change_page)
+
+def change_page():
+    st.session_state.page_control += 1
+ 
 st.title("区間タイム計測くん")
 st.subheader("使い方")
 st.text('''''')
+st.text(list(st.session_state.keys()))
 
+if "page_control" in st.session_state and st.session_state.page_control == 1:
+    if "clear_TM" in st.session_state:
+        for ss in list(st.session_state.keys()):
+            if ss not in ["s_frames","page_control"]:
+                del st.session_state[ss]
+    st.subheader("動画のアップロード")
+    st_file_path = st.file_uploader("ゴール地点の動画をアップロードしてください")
+    st.session_state.g_frames = peak_select(st_file_path)
+    change_movie("測定結果を表示")
 
+elif "page_control" in st.session_state and st.session_state.page_control == 2:
+    result = []
+    for s,g in zip(st.session_state.s_frames,st.session_state.g_frames):
+        result.append(g-s)
+    st.text(result)
 
-st.subheader("動画のアップロード")
-st_file_path = st.file_uploader("スタート地点の動画をアップロードしてください")
-
-#動画がアップロードされていて、かつ動画解析をしていないとき
-if (st_file_path is not None) and ("TM" not in st.session_state):
-    TM, peaks = fileload_measure(st_file_path)
-    st.session_state.TM = TM
-    st.session_state.peaks = peaks
-
-#動画解析ができているとき
-if "TM" in st.session_state:
-    # セッションに現在のフレーム位置とピークリストのインデックスを保持
-    if 'peak_idx' not in st.session_state:
-        st.session_state.peak_idx = 0  # peakリストのインデックス
-    if 'frame_pos' not in st.session_state:
-        st.session_state.frame_pos = st.session_state.peaks[st.session_state.peak_idx]
-    if "selected_frame" not in st.session_state:
-        st.session_state.selected_frame = []
-
-
-    # ボタンで操作を選択
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        if st.button("5つ前のフレーム"):
-            st.session_state.frame_pos = max(0,st.session_state.frame_pos - 5)
-    with col2:
-        if st.button("1つ前のフレーム"):
-            st.session_state.frame_pos = max(0,st.session_state.frame_pos - 1)
-    with col3:
-        if st.button("これにする"):
-            st.session_state.selected_frame.append(st.session_state.frame_pos)
-            st.session_state.peak_idx = min(len(st.session_state.peaks) - 1, st.session_state.peak_idx + 1)
-            st.session_state.frame_pos = st.session_state.peaks[st.session_state.peak_idx]
-            # クエリパラメータを設定してリロードをトリガーする
-            st.experimental_set_query_params(reload=True)
-    with col4:
-        if st.button("1つ次のフレーム"):
-            st.session_state.frame_pos = min(st.session_state.TM.frame_num-1, st.session_state.frame_pos + 1)
-    with col5:
-        if st.button("5つ次のフレーム"):
-            st.session_state.frame_pos = min(st.session_state.TM.frame_num-1, st.session_state.frame_pos + 5)
-
-    # 現在のフレームに移動
-    st.session_state.TM.video.set(cv2.CAP_PROP_POS_FRAMES, st.session_state.frame_pos)
-    ret, frame = st.session_state.TM.video.read()
-    if ret:
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(frame_rgb)
-        st.image(img_pil, caption=f"Frame {st.session_state.frame_pos}")
-        st.text(st.session_state.selected_frame)
+else:
+    st.session_state.page_control = 0
+    st.subheader("動画のアップロード")
+    st_file_path = st.file_uploader("スタート地点の動画をアップロードしてください")
+    st.session_state.s_frames = peak_select(st_file_path)
+    st.session_state.clear_TM = True
+    change_movie("ゴール地点の動画を選択")
